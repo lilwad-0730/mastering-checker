@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SoundMaster AI — 獨立音樂人母帶檢查器 (Mastering Quality Checker)</title>
+  <meta name="description" content="專為獨立音樂人打造的免費、純前端母帶與分軌檢查軟體。即時檢測 LUFS、True Peak 峰值、串流平台規範對照、頻率遮蔽與人聲衝突、取樣率與位元深度。">
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="dark-theme">
+  <div class="app-container">
+
+    <!-- Header Navigation -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="logo-icon">
+          <i class="fa-solid fa-sliders"></i>
+        </div>
+        <div class="logo-text">
+          <h1>SoundMaster <span class="badge">PRO</span></h1>
+          <p>獨立音樂人母帶品質與分軌檢查器 (Client-Side Audio Mastering QC)</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btn-load-demo" class="btn btn-secondary">
+          <i class="fa-solid fa-wand-magic-sparkles"></i> 載入示範母帶與分軌
+        </button>
+        <button id="btn-export-report" class="btn btn-primary" disabled>
+          <i class="fa-solid fa-file-contract"></i> 匯出母帶診斷報告
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace Layout -->
+    <main class="workspace">
+      
+      <!-- Left Control Panel & File Upload -->
+      <aside class="sidebar">
+        <div class="panel upload-panel">
+          <div class="panel-header">
+            <h3><i class="fa-solid fa-cloud-arrow-up"></i> 音訊檔案載入</h3>
+            <span class="tooltip-icon" title="支援單一母帶 WAV/FLAC/MP3，或同時拖放多個 Stems 分軌檔"><i class="fa-solid fa-circle-info"></i></span>
+          </div>
+
+          <div id="drop-zone" class="drop-zone">
+            <div class="drop-icon">
+              <i class="fa-solid fa-file-audio"></i>
+            </div>
+            <h4>拖放母帶或 Stems 分軌至此</h4>
+            <p>或點擊選擇檔案 (WAV, FLAC, AIFF, MP3)</p>
+            <input type="file" id="audio-input" multiple accept="audio/*,.wav,.flac,.aiff,.mp3,.ogg,.m4a" class="file-input">
+            <div class="privacy-badge">
+              <i class="fa-solid fa-shield-halved"></i> 100% 本地運算 • 音檔絕不上傳
+            </div>
+          </div>
+
+          <!-- Audio Loading & Decoding Progress Bar -->
+          <div id="upload-progress-container" class="upload-progress-container hidden">
+            <div class="progress-info">
+              <span id="progress-label" class="progress-label"><i class="fa-solid fa-spinner fa-spin"></i> 音檔解碼中...</span>
+              <span id="progress-percent" class="progress-percent">0%</span>
+            </div>
+            <div class="progress-bar-bg">
+              <div id="upload-progress-fill" class="progress-bar-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <!-- Uploaded Files List -->
+          <div class="file-list-container">
+            <h4><i class="fa-solid fa-list-check"></i> 已載入音軌 (<span id="file-count">0</span>)</h4>
+            <div id="file-list" class="file-list">
+              <div class="empty-state">尚無載入檔案，請拖放音檔或點擊上傳</div>
+            </div>
+          </div>
+
+          <!-- Stems Assignment Controls -->
+          <div id="stems-assignment-panel" class="stems-assignment-panel hidden">
+            <h4><i class="fa-solid fa-layer-group"></i> 分軌類型指定 (Stems)</h4>
+            <p class="sub-text">指定分軌類型以啟動 AI 頻率干擾與遮蔽分析：</p>
+            <div id="stems-mapping-list" class="stems-mapping-list">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+          
+          <button id="btn-analyze" class="btn btn-accent btn-block" disabled>
+            <i class="fa-solid fa-bolt"></i> 開始母帶全面檢查
+          </button>
+
+          <!-- Master DSP Analysis Progress Container -->
+          <div id="dsp-progress-container" class="dsp-progress-container hidden" style="margin-top: 14px;">
+            <div class="progress-info">
+              <span id="dsp-progress-label" class="progress-label" style="color: var(--accent-yellow);"><i class="fa-solid fa-gear fa-spin"></i> DSP 分析中...</span>
+              <span id="dsp-progress-percent" class="progress-percent" style="color: var(--accent-yellow);">0%</span>
+            </div>
+            <div class="progress-bar-bg">
+              <div id="dsp-progress-fill" class="progress-bar-fill" style="width: 0%; background: var(--gradient-gold);"></div>
+            </div>
+            <div id="dsp-time-estimate" class="dsp-time-estimate" style="font-size: 0.72rem; color: var(--text-muted); margin-top: 6px; text-align: right; font-family: var(--font-mono);">預估時間：約 2 秒</div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Right Main Content & Analytics Panel -->
+      <section class="main-content">
+
+        <!-- Quick Status Overview Banner -->
+        <div id="status-banner" class="status-banner hidden">
+          <div class="status-item">
+            <div class="status-label">檢測狀態</div>
+            <div id="status-text" class="status-value highlight-green">準備就緒</div>
+          </div>
+          <div class="status-item">
+            <div class="status-label">檔案總數</div>
+            <div id="status-files" class="status-value">0 Tracks</div>
+          </div>
+          <div class="status-item">
+            <div class="status-label">整體母帶評級</div>
+            <div id="status-grade" class="status-value grade-badge">--</div>
+          </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <nav class="analysis-tabs">
+          <button class="tab-btn active" data-tab="tab-lufs">
+            <i class="fa-solid fa-chart-simple"></i> LUFS & True Peak 平台對照
+          </button>
+          <button class="tab-btn" data-tab="tab-masking">
+            <i class="fa-solid fa-wave-square"></i> 頻率遮蔽與分軌干擾
+          </button>
+          <button class="tab-btn" data-tab="tab-specs">
+            <i class="fa-solid fa-microchip"></i> 取樣率 & 位元深度
+          </button>
+          <button class="tab-btn" data-tab="tab-format">
+            <i class="fa-solid fa-file-circle-check"></i> 副檔名與發行建議
+          </button>
+          <button class="tab-btn" data-tab="tab-phase">
+            <i class="fa-solid fa-circle-nodes"></i> 立體聲相位 (Ozone Imager)
+          </button>
+        </nav>
+
+        <!-- Tab 1: LUFS & True Peak Meter & Platforms -->
+        <div id="tab-lufs" class="tab-content active">
+          
+          <!-- Audio Player & Waveform Visualizer -->
+          <div class="panel waveform-panel">
+            <div class="waveform-header">
+              <div class="track-info">
+                <span id="current-track-name" class="track-name">選擇或播放音軌...</span>
+                <span id="current-track-meta" class="track-meta">-- kHz / -- bit</span>
+              </div>
+              <div class="audio-controls">
+                <button id="btn-play" class="btn btn-icon" disabled><i class="fa-solid fa-play"></i></button>
+                <span id="time-display" class="time-display">00:00 / 00:00</span>
+              </div>
+            </div>
+            <canvas id="waveform-canvas" height="90"></canvas>
+          </div>
+
+          <!-- LUFS Gauges Grid -->
+          <div class="gauges-grid">
+            <div class="panel gauge-card">
+              <div class="gauge-title">Integrated LUFS</div>
+              <div id="val-integrated-lufs" class="gauge-value">--.- <span>LUFS</span></div>
+              <div class="gauge-subtitle">整首歌曲平均響度 (EBU R128)</div>
+              <div class="gauge-bar-bg"><div id="bar-integrated-lufs" class="gauge-bar-fill" style="width: 0%;"></div></div>
+            </div>
+
+            <div class="panel gauge-card" id="card-true-peak">
+              <div class="gauge-title">True Peak (dBTP)</div>
+              <div id="val-true-peak" class="gauge-value">--.- <span>dBTP</span></div>
+              <div id="subtitle-true-peak" class="gauge-subtitle">4x Oversampling 跨採樣峰值</div>
+              <div class="gauge-bar-bg"><div id="bar-true-peak" class="gauge-bar-fill" style="width: 0%;"></div></div>
+            </div>
+
+            <div class="panel gauge-card">
+              <div class="gauge-title">Loudness Range (LRA)</div>
+              <div id="val-lra" class="gauge-value">--.- <span>LU</span></div>
+              <div class="gauge-subtitle">主歌/副歌動態範圍起伏</div>
+              <div class="gauge-bar-bg"><div id="bar-lra" class="gauge-bar-fill" style="width: 0%;"></div></div>
+            </div>
+
+            <div class="panel gauge-card">
+              <div class="gauge-title">Max Short-term LUFS</div>
+              <div id="val-shortterm-lufs" class="gauge-value">--.- <span>LUFS</span></div>
+              <div class="gauge-subtitle">副歌高潮處 3 秒最大響度</div>
+              <div class="gauge-bar-bg"><div id="bar-shortterm-lufs" class="gauge-bar-fill" style="width: 0%;"></div></div>
+            </div>
+          </div>
+
+          <!-- True Peak Warning Banner -->
+          <div id="true-peak-alert-banner" class="format-advisor-banner warning-card hidden" style="margin-bottom: 20px;">
+            <div class="advisor-icon" style="color: var(--accent-red);"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <div class="advisor-info">
+              <h4 style="color: var(--accent-red); font-size: 1.05rem;">⚠️ True Peak 峰值過載警告 (超出 -1.0 dBTP 門檻)</h4>
+              <p id="true-peak-alert-desc" style="margin-top: 4px; font-size: 0.88rem; color: var(--text-primary);"></p>
+              <div style="margin-top: 10px; padding: 10px 14px; background: rgba(239, 68, 68, 0.15); border-left: 4px solid var(--accent-red); border-radius: 4px; font-size: 0.85rem;">
+                <strong style="color: #ffaaaa;"><i class="fa-solid fa-screwdriver-wrench"></i> 建議處置行動：</strong>
+                請立即回到 DAW (Logic Pro, Ableton, FL Studio, Pro Tools 等) 的 Master 總輸出軌，載入 <strong>Peak Limiter（壓限器）</strong>，將 Ceiling (最高峰值上限) 嚴格限制在 <code>-1.0 dBTP</code> 或 <code>-2.0 dBTP</code>，以防止音檔在串流平台轉碼時產生破音！
+              </div>
+            </div>
+          </div>
+
+          <!-- Streaming Platforms Compliance Matrix -->
+          <div class="panel platform-matrix-panel">
+            <div class="panel-header">
+              <h3><i class="fa-brands fa-spotify"></i> 串流平台規範對照與 Loudness Penalty 預測</h3>
+            </div>
+            <div class="table-responsive">
+              <table class="platform-table">
+                <thead>
+                  <tr>
+                    <th>串流平台 / 媒介</th>
+                    <th>規範門檻 (Target LUFS)</th>
+                    <th>Peak 峰值上限</th>
+                    <th>您的音檔測量值</th>
+                    <th>預期音量調整 (Loudness Penalty)</th>
+                    <th>True Peak 相容狀態</th>
+                  </tr>
+                </thead>
+                <tbody id="platform-matrix-body">
+                  <tr>
+                    <td colspan="6" class="text-center">請上傳音檔並點擊「開始母帶檢查」以產生對照表</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Tab 2: Frequency Spectrum & Stem Masking Check -->
+        <div id="tab-masking" class="tab-content">
+          <div class="panel spectrum-panel">
+            <div class="panel-header">
+              <h3><i class="fa-solid fa-chart-area"></i> 全頻段 FFT 頻譜分析儀 (Spectrum Analyzer)</h3>
+              <div class="spectrum-legend">
+                <span class="legend-item low"><i class="fa-solid fa-square"></i> 20-250Hz Sub/Bass</span>
+                <span class="legend-item mid-low"><i class="fa-solid fa-square"></i> 250-500Hz Mud Zone</span>
+                <span class="legend-item mid"><i class="fa-solid fa-square"></i> 500-2kHz Mid</span>
+                <span class="legend-item high-mid"><i class="fa-solid fa-square"></i> 2k-6kHz Vocal/Harsh</span>
+                <span class="legend-item high"><i class="fa-solid fa-square"></i> 6k-20kHz Air</span>
+              </div>
+            </div>
+            <canvas id="spectrum-canvas" height="220"></canvas>
+          </div>
+
+          <div class="masking-analysis-grid">
+            <!-- Single Master Muddiness Analysis -->
+            <div class="panel Single-master-card">
+              <div class="panel-header">
+                <h4><i class="fa-solid fa-cloud"></i> 母帶頻率堆積與渾濁度分析 (Muddiness Index)</h4>
+              </div>
+              <div id="muddiness-result" class="analysis-result-box">
+                <p>請載入母帶檔以計算中低頻 (250-500Hz) 渾濁積聚率。</p>
+              </div>
+            </div>
+
+            <!-- Stems Frequency Conflict Analysis -->
+            <div class="panel stem-conflict-card">
+              <div class="panel-header">
+                <h4><i class="fa-solid fa-person-burst"></i> AI 分軌頻率打架與遮蔽警示 (Stem Masking)</h4>
+              </div>
+              <div id="stem-conflict-result" class="analysis-result-box">
+                <p>請上傳並指定人聲 (Vocal) 與樂器分軌 (Bass/Synth) 以啟動頻率爭搶遮蔽檢查。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 3: Sample Rate & Bit Depth Inspector -->
+        <div id="tab-specs" class="tab-content">
+          <div class="panel specs-panel">
+            <div class="panel-header">
+              <h3><i class="fa-solid fa-microchip"></i> 音訊採樣率與位元深度 (Sample Rate & Bit Depth)</h3>
+            </div>
+            <div class="specs-grid" id="specs-card-grid">
+              <div class="specs-card">
+                <div class="specs-card-header">取樣率 (Sample Rate)</div>
+                <div id="spec-sample-rate" class="specs-card-value">-- Hz</div>
+                <div id="spec-sample-rate-status" class="specs-card-status">等待檢測...</div>
+                <p id="spec-sample-rate-desc" class="specs-card-desc">預期標準為 44.1 kHz (CD/串流) 或 48 kHz (影音相容)。</p>
+              </div>
+
+              <div class="specs-card">
+                <div class="specs-card-header">原始位元深度 (Bit Depth)</div>
+                <div id="spec-bit-depth" class="specs-card-value">-- Bit</div>
+                <div id="spec-bit-depth-status" class="specs-card-status">等待檢測...</div>
+                <p id="spec-bit-depth-desc" class="specs-card-desc">母帶建議採用 24-bit 深度，以獲取高動態對比與低雜訊底噪。</p>
+              </div>
+
+              <div class="specs-card">
+                <div class="specs-card-header">聲道組態 (Channels)</div>
+                <div id="spec-channels" class="specs-card-value">--</div>
+                <div id="spec-channels-status" class="specs-card-status">等待檢測...</div>
+                <p id="spec-channels-desc" class="specs-card-desc">標準立體聲 (Stereo 2-Channel)。</p>
+              </div>
+
+              <div class="specs-card">
+                <div class="specs-card-header">音檔持續時間 (Duration)</div>
+                <div id="spec-duration" class="specs-card-value">--:--</div>
+                <div id="spec-duration-status" class="specs-card-status">等待檢測...</div>
+                <p id="spec-duration-desc" class="specs-card-desc">總播放時間與採樣總數。</p>
+              </div>
+            </div>
+
+            <!-- Technical Explanation -->
+            <div class="specs-guideline-box">
+              <h4><i class="fa-solid fa-graduation-cap"></i> 獨立音樂人發行規格建議小錦囊：</h4>
+              <ul>
+                <li><strong>44.1 kHz vs 48 kHz：</strong> Spotify 與 Apple Music 支援 44.1kHz 與 48kHz 無損上架；若有配樂配影音需求，導出 48kHz 能避免重採樣 (Resampling) 造成的失真。</li>
+                <li><strong>24-bit PCM：</strong> 母帶交付絕佳選擇，位元深度決定動態範圍 (24-bit 具備 144dB 動態)，遠優於 16-bit (96dB)。</li>
+                <li><strong>32-bit Float：</strong> 適用於混音與 DAW 中間檔，但上架發行商 (DistroKid/Tunecore) 通常要求轉為 24-bit 或 16-bit WAV。</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 4: Audio Format & Extension Advisor -->
+        <div id="tab-format" class="tab-content">
+          <div class="panel format-panel">
+            <div class="panel-header">
+              <h3><i class="fa-solid fa-file-audio"></i> 音檔副檔名與編碼格式建議</h3>
+            </div>
+            
+            <div id="format-advisor-banner" class="format-advisor-banner warning-card">
+              <div class="advisor-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+              <div class="advisor-info">
+                <h4 id="format-detected-title">請載入音檔檢測格式</h4>
+                <p id="format-detected-desc">系統將解析附檔名與編碼結構，評估是否適合用於發行上架。</p>
+              </div>
+            </div>
+
+            <div class="distributor-guide-grid">
+              <div class="distributor-card">
+                <div class="distributor-header"><i class="fa-solid fa-compact-disc"></i> 數位發行商 (DistroKid / Tunecore / CD Baby)</div>
+                <ul class="guide-list">
+                  <li><i class="fa-solid fa-circle-check text-green"></i> <strong>副檔名：</strong> 推薦 <code>.wav</code> 或 <code>.flac</code></li>
+                  <li><i class="fa-solid fa-circle-check text-green"></i> <strong>編碼：</strong> Uncompressed PCM, 24-bit / 44.1kHz 或 48kHz</li>
+                  <li><i class="fa-solid fa-circle-xmark text-red"></i> <strong>禁止：</strong> 勿上傳 <code>.mp3</code>、<code>.m4a</code> 或 <code>.aac</code>，避免二次壓縮音質受損</li>
+                </ul>
+              </div>
+
+              <div class="distributor-card">
+                <div class="distributor-header"><i class="fa-brands fa-apple"></i> Apple Digital Masters 高品質認證</div>
+                <ul class="guide-list">
+                  <li><i class="fa-solid fa-circle-check text-green"></i> <strong>規格：</strong> 24-bit / 96kHz 或 48kHz 24-bit WAV</li>
+                  <li><i class="fa-solid fa-circle-check text-green"></i> <strong>Peak 規範：</strong> True Peak 嚴格限制於 <code>-1.0 dBTP</code> 以下，絕不可有 Inter-sample Clipping</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 5: Stereo Phase Correlation & Ozone Imager Visualizer -->
+        <div id="tab-phase" class="tab-content">
+          <div class="panel spectrum-panel">
+            <div class="panel-header">
+              <h3><i class="fa-solid fa-circle-nodes"></i> Ozone Imager 風格 — 半圓形立體聲相位分析儀 (Polar Goniometer)</h3>
+              <span class="tooltip-icon" title="半圓頂點代表正中央 Mono (Mid)，左右二端代表 Extreme Stereo Side"><i class="fa-solid fa-circle-info"></i></span>
+            </div>
+            
+            <div style="position: relative; text-align: center;">
+              <canvas id="phase-canvas" height="260"></canvas>
+            </div>
+          </div>
+
+          <div class="gauges-grid" style="margin-top: 20px;">
+            <div class="panel gauge-card">
+              <div class="gauge-title">Phase Correlation (相位相關性)</div>
+              <div id="val-phase-corr" class="gauge-value">+1.00</div>
+              <div id="subtitle-phase-corr" class="gauge-subtitle">範圍：-1.0 (反相) 至 +1.0 (正相)</div>
+              <div class="gauge-bar-bg"><div id="bar-phase-corr" class="gauge-bar-fill" style="width: 100%;"></div></div>
+            </div>
+
+            <div class="panel gauge-card">
+              <div class="gauge-title">Stereo Width (立體聲寬度比)</div>
+              <div id="val-stereo-width" class="gauge-value">-- %</div>
+              <div class="gauge-subtitle">Side 旁側分量能量佔比</div>
+              <div class="gauge-bar-bg"><div id="bar-stereo-width" class="gauge-bar-fill" style="width: 50%;"></div></div>
+            </div>
+          </div>
+
+          <!-- Phase Cancellation Warning Card -->
+          <div id="phase-alert-banner" class="format-advisor-banner warning-card hidden" style="margin-top: 20px;">
+            <div class="advisor-icon" style="color: var(--accent-red);"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <div class="advisor-info">
+              <h4 id="phase-alert-title" style="color: var(--accent-red); font-size: 1.05rem;">⚠️ 立體聲相位抵消警告 (Phase Cancellation Risk)</h4>
+              <p id="phase-alert-desc" style="margin-top: 4px; font-size: 0.88rem; color: var(--text-primary);"></p>
+            </div>
+          </div>
+        </div>
+
+      </section>
+    </main>
+
+    <!-- Report Modal / Printable View -->
+    <div id="report-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2><i class="fa-solid fa-file-contract"></i> 獨立音樂人母帶檢查診斷報告</h2>
+          <button id="btn-close-modal" class="btn btn-icon"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="report-body" class="report-body">
+          <!-- Dynamic report content -->
+        </div>
+        <div class="modal-footer">
+          <button id="btn-print-report" class="btn btn-secondary"><i class="fa-solid fa-print"></i> 列印 / 存為 PDF</button>
+          <button id="btn-copy-markdown" class="btn btn-primary"><i class="fa-solid fa-copy"></i> 複製 Markdown 報告</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/lufs-engine.js"></script>
+  <script src="js/masking-engine.js"></script>
+  <script src="js/phase-engine.js"></script>
+  <script src="js/header-parser.js"></script>
+  <script src="js/format-advisor.js"></script>
+  <script src="js/audio-decoder.js"></script>
+  <script src="js/report-generator.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
