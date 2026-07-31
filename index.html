@@ -89,7 +89,10 @@
           </div>
           
           <button id="btn-analyze" class="btn btn-accent btn-block" disabled>
-            <i class="fa-solid fa-bolt"></i> 開始母帶全面檢查
+            <i class="fa-solid fa-play"></i> 執行當前頁籤檢測
+          </button>
+          <button id="btn-analyze-all" class="btn btn-secondary btn-block" style="margin-top: 8px;" disabled>
+            <i class="fa-solid fa-bolt"></i> ⚡ 一鍵全項目掃描
           </button>
 
           <!-- Master DSP Analysis Progress Container -->
@@ -141,6 +144,9 @@
           </button>
           <button class="tab-btn" data-tab="tab-phase">
             <i class="fa-solid fa-circle-nodes"></i> 立體聲相位 (Ozone Imager)
+          </button>
+          <button class="tab-btn" data-tab="tab-key">
+            <i class="fa-solid fa-music"></i> 歌曲調性 (Song Key)
           </button>
         </nav>
 
@@ -396,6 +402,43 @@
           </div>
         </div>
 
+        <!-- Tab 6: Song Key & Scale Analysis -->
+        <div id="tab-key" class="tab-content">
+          <div class="panel spectrum-panel">
+            <div class="panel-header">
+              <h3><i class="fa-solid fa-music"></i> 歌曲主調性與音階分析儀 (Key & Mode Finder)</h3>
+              <span class="tooltip-icon" title="使用 Krumhansl-Schmuckler 演算法比對 24 種大小調 Chromagram 譜面向量"><i class="fa-solid fa-circle-info"></i></span>
+            </div>
+
+            <!-- Key Summary Gauges -->
+            <div class="gauges-grid" style="margin-bottom: 20px;">
+              <div class="panel gauge-card" style="border-top-color: var(--accent-purple);">
+                <div class="gauge-title">檢測主要調性 (Detected Key)</div>
+                <div id="val-detected-key" class="gauge-value" style="font-size: 1.6rem; color: var(--accent-purple);">--</div>
+                <div id="val-key-confidence" class="gauge-subtitle">演算法信心度：-- %</div>
+              </div>
+
+              <div class="panel gauge-card" style="border-top-color: var(--accent-yellow);">
+                <div class="gauge-title">Camelot Wheel 混音代碼</div>
+                <div id="val-camelot-code" class="gauge-value" style="color: var(--accent-yellow);">--</div>
+                <div class="gauge-subtitle">DJ 和聲諧音混音 (Harmonic Mixing) 規範</div>
+              </div>
+
+              <div class="panel gauge-card" style="border-top-color: var(--accent-blue);">
+                <div class="gauge-title">關係大小調 (Relative Key)</div>
+                <div id="val-relative-key" class="gauge-value" style="font-size: 1.25rem; color: var(--accent-blue);">--</div>
+                <div class="gauge-subtitle">共享相同升降記號的關係音階</div>
+              </div>
+            </div>
+
+            <!-- Chromagram 12-Pitch Distribution Canvas -->
+            <div class="panel-header">
+              <h4><i class="fa-solid fa-chart-column"></i> 12 音級 Pitch Class 色彩能量分佈 (Chromagram)</h4>
+            </div>
+            <canvas id="chroma-canvas" height="200"></canvas>
+          </div>
+        </div>
+
       </section>
     </main>
 
@@ -422,6 +465,7 @@
   <script src="js/lufs-engine.js"></script>
   <script src="js/masking-engine.js"></script>
   <script src="js/phase-engine.js"></script>
+  <script src="js/key-engine.js"></script>
   <script src="js/header-parser.js"></script>
   <script src="js/format-advisor.js"></script>
   <script src="js/audio-decoder.js"></script>

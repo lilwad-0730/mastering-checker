@@ -111,12 +111,24 @@ class ReportGenerator {
           </ul>
         </div>
         ` : ''}
+
+        <!-- Section 6: Song Key & Scale Analysis -->
+        ${data.keyData ? `
+        <div class="report-section" style="margin-top:24px;">
+          <h3><i class="fa-solid fa-music"></i> 6. 歌曲主調性與音階分析</h3>
+          <ul>
+            <li><strong>檢測主要調性：</strong> ${data.keyData.detectedKey} (演算法信心度: ${data.keyData.confidence}%)</li>
+            <li><strong>Camelot Wheel 混音代碼：</strong> ${data.keyData.camelotCode}</li>
+            <li><strong>關係大小調：</strong> ${data.keyData.relativeKey}</li>
+          </ul>
+        </div>
+        ` : ''}
       </div>
     `;
   }
 
   generateMarkdownReport(data) {
-    const { masterName, lufsData, maskingData, headerInfo, formatData, phaseData, grade } = data;
+    const { masterName, lufsData, maskingData, headerInfo, formatData, phaseData, keyData, grade } = data;
     return `
 # SoundMaster QC 獨立音樂人母帶檢查報告
 - **音訊名稱**: ${masterName}
@@ -124,30 +136,35 @@ class ReportGenerator {
 - **產生時間**: ${new Date().toLocaleString('zh-TW')}
 
 ## 1. LUFS 響度與 True Peak 峰值對照
-- **Integrated LUFS**: ${lufsData.integratedLUFS} LUFS
-- **True Peak**: ${lufsData.truePeakDB} dBTP ${lufsData.truePeakDB > -1.0 ? '(⚠️ 超出 -1.0 dBTP 門檻！請使用 Limiter 將 Ceiling 限制在 -1.0 dBTP)' : '(✓ 安全)'}
-- **Loudness Range**: ${lufsData.lra} LU
-${lufsData.truePeakDB > -1.0 ? '> ⚠️ **Limiter 警告**：您的音檔 True Peak 峰值超出 -1.0 dBTP 安全值，請於 DAW 的 Master 總軌載入 Limiter 壓限器並設定 Ceiling ≤ -1.0 dBTP。\n' : ''}
+- **Integrated LUFS**: ${lufsData ? lufsData.integratedLUFS : '--'} LUFS
+- **True Peak**: ${lufsData ? lufsData.truePeakDB : '--'} dBTP ${lufsData && lufsData.truePeakDB > -1.0 ? '(⚠️ 超出 -1.0 dBTP 門檻！請使用 Limiter 將 Ceiling 限制在 -1.0 dBTP)' : '(✓ 安全)'}
+- **Loudness Range**: ${lufsData ? lufsData.lra : '--'} LU
+${lufsData && lufsData.truePeakDB > -1.0 ? '> ⚠️ **Limiter 警告**：您的音檔 True Peak 峰值超出 -1.0 dBTP 安全值，請於 DAW 的 Master 總軌載入 Limiter 壓限器並設定 Ceiling ≤ -1.0 dBTP。\n' : ''}
 
 ### 串流平台增益懲罰預測:
-${lufsData.platformAnalysis.map(p => `- **${p.name}**: 目標 ${p.targetLUFS} LUFS | 預估 Penalty: ${p.loudnessPenalty} dB`).join('\n')}
+${lufsData && lufsData.platformAnalysis ? lufsData.platformAnalysis.map(p => `- **${p.name}**: 目標 ${p.targetLUFS} LUFS | 預估 Penalty: ${p.loudnessPenalty} dB`).join('\n') : ''}
 
 ## 2. 頻率遮蔽與分軌干擾分析
-- **渾濁度**: ${maskingData.singleMaster.muddinessText}
-${maskingData.stemConflicts.conflicts.map(c => `- **[${c.band}] ${c.stemName}**: ${c.description} (建議: ${c.recommendation})`).join('\n')}
+- **渾濁度**: ${maskingData && maskingData.singleMaster ? maskingData.singleMaster.muddinessText : '--'}
+${maskingData && maskingData.stemConflicts && maskingData.stemConflicts.conflicts ? maskingData.stemConflicts.conflicts.map(c => `- **[${c.band}] ${c.stemName}**: ${c.description} (建議: ${c.recommendation})`).join('\n') : ''}
 
 ## 3. 取樣率與位元深度檢測
-- **取樣率**: ${headerInfo.sampleRate || 44100} Hz
-- **位元深度**: ${headerInfo.bitDepth || 24}-bit
+- **取樣率**: ${headerInfo ? (headerInfo.sampleRate || 44100) : '--'} Hz
+- **位元深度**: ${headerInfo ? (headerInfo.bitDepth || 24) : '--'}-bit
 
 ## 4. 副檔名與發行建議
-- **狀態**: ${formatData.title}
-- **建議**: ${formatData.recommendations.join(' / ') || '規格完全正常'}
+- **狀態**: ${formatData ? formatData.title : '--'}
+- **建議**: ${formatData && formatData.recommendations ? formatData.recommendations.join(' / ') : '規格完全正常'}
 
 ## 5. 立體聲相位與 Ozone Imager 診斷
-- **Phase Correlation**: ${phaseData ? phaseData.correlation : 1.0}
-- **Stereo Width**: ${phaseData ? phaseData.stereoWidth : 0}%
+- **Phase Correlation**: ${phaseData ? phaseData.correlation : '--'}
+- **Stereo Width**: ${phaseData ? phaseData.stereoWidth : '--'}%
 - **相容性結論**: ${phaseData ? phaseData.statusText : '純單聲道'}
+
+## 6. 歌曲主調性與音階分析
+- **檢測調性**: ${keyData ? keyData.detectedKey : '--'}
+- **Camelot 代碼**: ${keyData ? keyData.camelotCode : '--'}
+- **關係大小調**: ${keyData ? keyData.relativeKey : '--'}
     `.trim();
   }
 }

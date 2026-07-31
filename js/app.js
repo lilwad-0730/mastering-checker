@@ -5,6 +5,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Engines & Utilities
   const lufsEngine = new LUFSEngine();
   const maskingEngine = new MaskingEngine();
+  const phaseEngine = new PhaseEngine();
+  const keyEngine = new KeyEngine();
   const headerParser = new HeaderParser();
   const formatAdvisor = new FormatAdvisor();
   const audioDecoder = new AudioDecoder();
@@ -48,6 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const btnAnalyze = document.getElementById('btn-analyze');
+  const btnAnalyzeAll = document.getElementById('btn-analyze-all');
   const btnLoadDemo = document.getElementById('btn-load-demo');
   const btnExportReport = document.getElementById('btn-export-report');
 
@@ -105,7 +108,11 @@ document.addEventListener('DOMContentLoaded', () => {
       tabContents.forEach(c => c.classList.remove('active'));
       btn.classList.add('active');
       const targetContent = document.getElementById(btn.dataset.tab);
-      targetContent.classList.add('active');
+      if (targetContent) targetContent.classList.add('active');
+
+      // Update button text to reflect active tab name
+      const activeTabName = btn.textContent.trim();
+      btnAnalyze.innerHTML = `<i class="fa-solid fa-play"></i> 檢測「${activeTabName}」`;
 
       // Force Canvas redraw when switching tabs so clientWidth is non-zero
       setTimeout(() => {
@@ -115,6 +122,8 @@ document.addEventListener('DOMContentLoaded', () => {
           drawSpectrum(currentAnalysisData && currentAnalysisData.maskingData ? currentAnalysisData.maskingData.singleMaster.bandPercentages : {});
         } else if (btn.dataset.tab === 'tab-lufs' && activeMasterIndex >= 0 && loadedFiles[activeMasterIndex]) {
           drawWaveform(loadedFiles[activeMasterIndex].buffer);
+        } else if (btn.dataset.tab === 'tab-key' && currentAnalysisData && currentAnalysisData.keyData) {
+          drawChromagram(currentAnalysisData.keyData.chromagram, currentAnalysisData.keyData.pitchNames);
         }
       }, 50);
     });
@@ -238,7 +247,9 @@ document.addEventListener('DOMContentLoaded', () => {
       stemsAssignmentPanel.classList.add('hidden');
     }
 
+    // Enable analysis buttons
     btnAnalyze.disabled = false;
+    btnAnalyzeAll.disabled = false;
   }
 
   // Load Demo Audio
@@ -267,8 +278,8 @@ document.addEventListener('DOMContentLoaded', () => {
     btnLoadDemo.disabled = false;
     btnLoadDemo.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> 載入示範母帶與分軌';
     
-    // Auto Trigger Analysis
-    btnAnalyze.click();
+    // Auto Trigger Scan All Analysis
+    btnAnalyzeAll.click();
   });
 
   const dspProgressContainer = document.getElementById('dsp-progress-container');
@@ -297,45 +308,108 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Run Master Check Analysis
+  // 1. Modular On-Demand Single-Tab Analysis
   btnAnalyze.addEventListener('click', async () => {
     if (loadedFiles.length === 0) return;
 
-    btnAnalyze.disabled = true;
-    btnAnalyze.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 母帶 DSP 全面檢測中...';
+    const activeTab = document.querySelector('.tab-btn.active');
+    const tabId = activeTab ? activeTab.dataset.tab : 'tab-lufs';
+    const tabName = activeTab ? activeTab.textContent.trim() : '目前項目';
 
-    // Find Master Buffer (or default to first track)
+    btnAnalyze.disabled = true;
+    btnAnalyzeAll.disabled = true;
+
     const masterTrack = loadedFiles.find(f => f.type === 'master') || loadedFiles[0];
     activeMasterIndex = loadedFiles.indexOf(masterTrack);
 
-    // Step 1: Init & EBU R128 LUFS & 4x Oversampling True Peak
-    updateDSPProgress(20, '正在計算 EBU R128 Integrated LUFS & 4x Oversampling True Peak...', '極速分析中 (< 0.1秒)');
+    if (!currentAnalysisData) {
+      currentAnalysisData = {
+        masterName: masterTrack.name,
+        lufsData: null,
+        maskingData: { singleMaster: null, stemConflicts: null },
+        headerInfo: masterTrack.headerInfo,
+        formatData: null,
+        phaseData: null,
+        keyData: null,
+        grade: '--'
+      };
+    }
+
+    if (tabId === 'tab-lufs') {
+      updateDSPProgress(40, '正在計算 EBU R128 LUFS & 4x True Peak...', '極速分析中');
+      await yieldThread(15);
+      currentAnalysisData.lufsData = await lufsEngine.analyzeAudioBuffer(masterTrack.buffer);
+    } else if (tabId === 'tab-masking') {
+      updateDSPProgress(50, '正在分析 20Hz-20kHz 頻譜與分軌干擾...', '極速分析中');
+      await yieldThread(15);
+      const singleSpectrum = maskingEngine.analyzeSpectrum(masterTrack.buffer);
+      const stemConflicts = maskingEngine.analyzeStemConflicts(loadedFiles.map(f => ({ name: f.name, type: f.type, audioBuffer: f.buffer })));
+      currentAnalysisData.maskingData = { singleMaster: singleSpectrum, stemConflicts };
+    } else if (tabId === 'tab-specs') {
+      updateDSPProgress(60, '正在解析採樣率與位元深度...', '極速分析中');
+      await yieldThread(10);
+      currentAnalysisData.headerInfo = masterTrack.headerInfo;
+    } else if (tabId === 'tab-format') {
+      updateDSPProgress(60, '正在比對發行管道與副檔名...', '極速分析中');
+      await yieldThread(10);
+      currentAnalysisData.formatData = formatAdvisor.evaluateFormat(masterTrack.name, masterTrack.headerInfo, masterTrack.buffer);
+    } else if (tabId === 'tab-phase') {
+      updateDSPProgress(70, '正在計算極座標相位與 Ozone 聲相圖...', '極速分析中');
+      await yieldThread(15);
+      currentAnalysisData.phaseData = phaseEngine.analyzePhase(masterTrack.buffer);
+    } else if (tabId === 'tab-key') {
+      updateDSPProgress(70, '正在計算 Chromagram 12音級與歌曲調性...', '極速分析中');
+      await yieldThread(20);
+      currentAnalysisData.keyData = keyEngine.analyzeKey(masterTrack.buffer);
+    }
+
+    updateDSPProgress(100, `「${tabName}」單項檢測完成！`, '完成');
+
+    renderAnalysisResults(currentAnalysisData, masterTrack.buffer);
+
+    btnAnalyze.disabled = false;
+    btnAnalyzeAll.disabled = false;
+    btnExportReport.disabled = false;
+    btnPlay.disabled = false;
+    statusBanner.classList.remove('hidden');
+    statusText.textContent = `已完成：${tabName}`;
+  });
+
+  // 2. Full Sweep Scan-All Analysis
+  btnAnalyzeAll.addEventListener('click', async () => {
+    if (loadedFiles.length === 0) return;
+
+    btnAnalyze.disabled = true;
+    btnAnalyzeAll.disabled = true;
+
+    const masterTrack = loadedFiles.find(f => f.type === 'master') || loadedFiles[0];
+    activeMasterIndex = loadedFiles.indexOf(masterTrack);
+
+    updateDSPProgress(15, '1/6 正在計算 EBU R128 LUFS & 4x True Peak...', '< 0.1秒');
     await yieldThread(15);
     const lufsData = await lufsEngine.analyzeAudioBuffer(masterTrack.buffer);
 
-    // Step 2: Spectrum & Mud Zone Analysis
-    updateDSPProgress(50, '正在分析 20Hz-20kHz 頻譜與 250-500Hz 渾濁積聚率...', '極速分析中 (< 0.1秒)');
+    updateDSPProgress(35, '2/6 正在分析 20Hz-20kHz 頻譜與分軌干擾...', '< 0.1秒');
     await yieldThread(15);
     const singleSpectrum = maskingEngine.analyzeSpectrum(masterTrack.buffer);
-
-    // Step 3: Stem Clash & Frequency Masking
-    updateDSPProgress(75, '正在進行 AI 人聲與樂器分軌頻率遮蔽交叉比對...', '極速分析中 (< 0.1秒)');
-    await yieldThread(15);
     const stemConflicts = maskingEngine.analyzeStemConflicts(loadedFiles.map(f => ({ name: f.name, type: f.type, audioBuffer: f.buffer })));
 
-    // Step 4: Stereo Phase & Ozone Imager Goniometer (High-Speed Engine)
-    updateDSPProgress(90, '正在計算極座標相位相干係數與 Ozone 聲相圖...', '即將完成');
-    await yieldThread(10);
-    const phaseEngine = new PhaseEngine();
+    updateDSPProgress(55, '3/6 正在計算極座標相位與 Ozone 聲相圖...', '< 0.1秒');
+    await yieldThread(15);
     const phaseData = phaseEngine.analyzePhase(masterTrack.buffer);
 
-    // Step 5: Header Specs & Format Advisor
-    updateDSPProgress(98, '正在彙整串流平台對照矩陣與診斷報告...', '即將完成');
+    updateDSPProgress(75, '4/6 正在進行 Krumhansl Chromagram 歌曲調性分析...', '< 0.1秒');
+    await yieldThread(15);
+    const keyData = keyEngine.analyzeKey(masterTrack.buffer);
+
+    updateDSPProgress(90, '5/6 正在解析採樣率與位元深度...', '< 0.1秒');
     await yieldThread(10);
     const headerInfo = masterTrack.headerInfo;
+
+    updateDSPProgress(98, '6/6 正在比對發行管道建議與產生報告...', '即將完成');
+    await yieldThread(10);
     const formatData = formatAdvisor.evaluateFormat(masterTrack.name, headerInfo, masterTrack.buffer);
 
-    // Grade Calculation
     let grade = 'A+';
     if (lufsData.truePeakDB > -1.0 || formatData.status === 'critical' || singleSpectrum.muddinessStatus === 'critical' || phaseData.status === 'critical') grade = 'C';
     else if (lufsData.integratedLUFS > -10.0 || singleSpectrum.muddinessStatus === 'warning' || phaseData.status === 'warning') grade = 'B';
@@ -348,21 +422,21 @@ document.addEventListener('DOMContentLoaded', () => {
       headerInfo,
       formatData,
       phaseData,
+      keyData,
       grade
     };
 
-    updateDSPProgress(100, '母帶 DSP 全面檢測完成！', '完成');
+    updateDSPProgress(100, '母帶全項目 DSP 掃描全數完成！', '完成');
 
-    // Render UI Updates
     renderAnalysisResults(currentAnalysisData, masterTrack.buffer);
 
     btnAnalyze.disabled = false;
-    btnAnalyze.innerHTML = '<i class="fa-solid fa-bolt"></i> 開始母帶全面檢查';
+    btnAnalyzeAll.disabled = false;
     btnExportReport.disabled = false;
     btnPlay.disabled = false;
 
     statusBanner.classList.remove('hidden');
-    statusText.textContent = '檢測完成';
+    statusText.textContent = '全項目檢測完成';
     statusFiles.textContent = loadedFiles.length + ' 軌已分析';
     statusGrade.textContent = grade;
   });
@@ -467,36 +541,56 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 5. Phase Analysis UI Updates
     const phaseData = data.phaseData;
-    const valPhaseCorr = document.getElementById('val-phase-corr');
-    const barPhaseCorr = document.getElementById('bar-phase-corr');
-    const valStereoWidth = document.getElementById('val-stereo-width');
-    const barStereoWidth = document.getElementById('bar-stereo-width');
-    const phaseAlertBanner = document.getElementById('phase-alert-banner');
-    const phaseAlertDesc = document.getElementById('phase-alert-desc');
+    if (phaseData) {
+      const valPhaseCorr = document.getElementById('val-phase-corr');
+      const barPhaseCorr = document.getElementById('bar-phase-corr');
+      const valStereoWidth = document.getElementById('val-stereo-width');
+      const barStereoWidth = document.getElementById('bar-stereo-width');
+      const phaseAlertBanner = document.getElementById('phase-alert-banner');
+      const phaseAlertDesc = document.getElementById('phase-alert-desc');
 
-    if (valPhaseCorr) {
-      valPhaseCorr.textContent = (phaseData.correlation >= 0 ? '+' : '') + phaseData.correlation.toFixed(2);
-      valPhaseCorr.style.color = phaseData.correlation < 0 ? '#ef4444' : phaseData.correlation < 0.3 ? '#f59e0b' : '#10b981';
-      barPhaseCorr.style.width = Math.min(100, Math.max(0, ((phaseData.correlation + 1) / 2) * 100)) + '%';
+      if (valPhaseCorr) {
+        valPhaseCorr.textContent = (phaseData.correlation >= 0 ? '+' : '') + phaseData.correlation.toFixed(2);
+        valPhaseCorr.style.color = phaseData.correlation < 0 ? '#ef4444' : phaseData.correlation < 0.3 ? '#f59e0b' : '#10b981';
+        barPhaseCorr.style.width = Math.min(100, Math.max(0, ((phaseData.correlation + 1) / 2) * 100)) + '%';
+      }
+
+      if (valStereoWidth) {
+        valStereoWidth.textContent = phaseData.stereoWidth + ' %';
+        barStereoWidth.style.width = phaseData.stereoWidth + '%';
+      }
+
+      if (phaseAlertBanner && phaseAlertDesc) {
+        if (phaseData.status === 'critical' || phaseData.status === 'warning') {
+          phaseAlertBanner.classList.remove('hidden');
+          phaseAlertDesc.textContent = phaseData.statusText;
+        } else {
+          phaseAlertBanner.classList.add('hidden');
+        }
+      }
     }
 
-    if (valStereoWidth) {
-      valStereoWidth.textContent = phaseData.stereoWidth + ' %';
-      barStereoWidth.style.width = phaseData.stereoWidth + '%';
-    }
+    // 6. Song Key & Scale Analysis UI Updates
+    const keyData = data.keyData;
+    if (keyData) {
+      const valDetectedKey = document.getElementById('val-detected-key');
+      const valKeyConfidence = document.getElementById('val-key-confidence');
+      const valCamelotCode = document.getElementById('val-camelot-code');
+      const valRelativeKey = document.getElementById('val-relative-key');
 
-    if (phaseAlertBanner && phaseAlertDesc) {
-      if (phaseData.status === 'critical' || phaseData.status === 'warning') {
-        phaseAlertBanner.classList.remove('hidden');
-        phaseAlertDesc.textContent = phaseData.statusText;
-      } else {
-        phaseAlertBanner.classList.add('hidden');
+      if (valDetectedKey) valDetectedKey.textContent = keyData.detectedKey;
+      if (valKeyConfidence) valKeyConfidence.textContent = `演算法信心度：${keyData.confidence} %`;
+      if (valCamelotCode) valCamelotCode.textContent = keyData.camelotCode;
+      if (valRelativeKey) valRelativeKey.textContent = keyData.relativeKey;
+
+      if (keyData.chromagram && keyData.pitchNames) {
+        drawChromagram(keyData.chromagram, keyData.pitchNames);
       }
     }
 
     // Render Canvas Waveform, Spectrum & Ozone Imager Phase Goniometer
     drawWaveform(audioBuffer);
-    drawSpectrum(singleSpectrum.bandPercentages);
+    if (singleSpectrum) drawSpectrum(singleSpectrum.bandPercentages);
     if (phaseData && phaseData.polarPoints) {
       drawPhaseGoniometer(phaseData.polarPoints);
     }
@@ -662,6 +756,39 @@ document.addEventListener('DOMContentLoaded', () => {
     ctx.arc(centerX, centerY, 4, 0, 2 * Math.PI);
     ctx.fillStyle = '#00f0ff';
     ctx.fill();
+  }
+
+  // Draw 12 Pitch Classes Chromagram Canvas
+  function drawChromagram(chromaValues, pitchNames) {
+    const chromaCanvas = document.getElementById('chroma-canvas');
+    if (!chromaCanvas) return;
+
+    const ctx = chromaCanvas.getContext('2d');
+    const containerWidth = (chromaCanvas.parentElement && chromaCanvas.parentElement.clientWidth > 0) ? chromaCanvas.parentElement.clientWidth : 720;
+    const width = chromaCanvas.width = containerWidth;
+    const height = chromaCanvas.height = 200;
+
+    ctx.clearRect(0, 0, width, height);
+
+    if (!chromaValues || chromaValues.length < 12) return;
+
+    const colors = ['#8b5cf6', '#ec4899', '#ef4444', '#f97316', '#f59e0b', '#10b981', '#06b6d4', '#00f0ff', '#3b82f6', '#6366f1', '#a855f7', '#d946ef'];
+    const barWidth = (width - 40) / 12;
+
+    chromaValues.forEach((val, i) => {
+      const barHeight = val * (height - 60);
+      const x = 20 + i * barWidth;
+      const y = height - 30 - barHeight;
+
+      ctx.fillStyle = colors[i % colors.length];
+      ctx.fillRect(x + 4, y, barWidth - 8, barHeight);
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '11px JetBrains Mono';
+      ctx.textAlign = 'center';
+      ctx.fillText(pitchNames[i] || i, x + barWidth / 2, height - 10);
+      ctx.fillText(Math.round(val * 100) + '%', x + barWidth / 2, y - 6);
+    });
   }
 
   // Audio Playback
