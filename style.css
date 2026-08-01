@@ -845,8 +845,9 @@ i.fa-solid, i.fa-brands, i.fa-regular {
   z-index: 1000;
 }
 
-.modal.hidden {
-  display: none;
+.modal.hidden,
+.hidden {
+  display: none !important;
 }
 
 .modal-content {
@@ -887,8 +888,4 @@ i.fa-solid, i.fa-brands, i.fa-regular {
   gap: 12px;
   padding: 16px 24px;
   border-top: 1px solid var(--border-color);
-}
-
-.hidden {
-  display: none !important;
 }

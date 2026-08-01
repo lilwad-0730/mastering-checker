@@ -1016,6 +1016,15 @@ document.addEventListener('DOMContentLoaded', () => {
     alert('Markdown 報告已成功複製到剪貼簿！');
   });
 
+  // Initial UI Reset (Ensure all progress containers, warning banners, and report modal start strictly hidden)
+  [statusBanner, uploadProgressContainer, dspProgressContainer, stemsAssignmentPanel, reportModal].forEach(el => {
+    if (el) el.classList.add('hidden');
+  });
+  ['true-peak-alert-banner', 'phase-alert-banner', 'format-advisor-banner'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+  });
+
   // Initial Empty Canvas Render
   drawPhaseGoniometer([]);
 });
