@@ -873,6 +873,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (activeMasterIndex < 0 || !loadedFiles[activeMasterIndex]) return;
 
     if (currentAudioSource) {
+      currentAudioSource.onended = null;
       try { currentAudioSource.stop(); } catch (e) {}
       currentAudioSource = null;
     }
@@ -900,6 +901,7 @@ document.addEventListener('DOMContentLoaded', () => {
     currentTrackName.textContent = loadedFiles[activeMasterIndex].name;
 
     currentAudioSource.onended = () => {
+      if (!isPlaying) return;
       const elapsed = currentSeekTime + (audioDecoder.audioCtx.currentTime - playbackStartCtxTime);
       if (elapsed >= duration - 0.2) {
         stopPlayback();
@@ -909,8 +911,32 @@ document.addEventListener('DOMContentLoaded', () => {
     updatePlaybackUI();
   }
 
+  function pausePlayback() {
+    if (!isPlaying) return;
+
+    if (activeMasterIndex >= 0 && loadedFiles[activeMasterIndex]) {
+      const elapsed = currentSeekTime + (audioDecoder.audioCtx.currentTime - playbackStartCtxTime);
+      currentSeekTime = Math.min(loadedFiles[activeMasterIndex].buffer.duration, elapsed);
+    }
+
+    if (currentAudioSource) {
+      currentAudioSource.onended = null;
+      try { currentAudioSource.stop(); } catch (e) {}
+      currentAudioSource = null;
+    }
+
+    if (playbackAnimFrame) {
+      cancelAnimationFrame(playbackAnimFrame);
+      playbackAnimFrame = null;
+    }
+
+    isPlaying = false;
+    btnPlay.innerHTML = '<i class="fa-solid fa-play"></i>';
+  }
+
   function stopPlayback() {
     if (currentAudioSource) {
+      currentAudioSource.onended = null;
       try { currentAudioSource.stop(); } catch (e) {}
       currentAudioSource = null;
     }
@@ -938,7 +964,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (activeMasterIndex < 0 || !loadedFiles[activeMasterIndex]) return;
 
     if (isPlaying) {
-      stopPlayback();
+      pausePlayback();
     } else {
       startPlaybackAt(currentSeekTime);
     }
