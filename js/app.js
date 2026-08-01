@@ -530,6 +530,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const secs = (durSec % 60).toString().padStart(2, '0');
     specDuration.textContent = `${mins}:${secs}`;
 
+    const timeDisplay = document.getElementById('time-display');
+    if (timeDisplay) {
+      timeDisplay.textContent = `00:00 / ${formatTime(audioBuffer.duration)}`;
+    }
+    if (currentTrackName && activeMasterIndex >= 0 && loadedFiles[activeMasterIndex]) {
+      currentTrackName.textContent = loadedFiles[activeMasterIndex].name;
+    }
+    if (currentTrackMeta) {
+      currentTrackMeta.textContent = `${headerInfo.sampleRate || audioBuffer.sampleRate} Hz / ${headerInfo.bitDepth || 24}-bit`;
+    }
+
     // 4. Format Advisor Banner
     if (formatData.status === 'critical') {
       formatBanner.className = 'format-advisor-banner warning-card';
@@ -596,18 +607,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Draw Waveform Canvas
-  function drawWaveform(audioBuffer) {
+  // Format seconds to mm:ss
+  function formatTime(sec) {
+    if (isNaN(sec) || sec < 0) return '00:00';
+    const totalSec = Math.floor(sec);
+    const m = Math.floor(totalSec / 60);
+    const s = (totalSec % 60).toString().padStart(2, '0');
+    return `${m.toString().padStart(2, '0')}:${s}`;
+  }
+
+  // Draw Waveform Canvas with Progress Playhead Overlay
+  function drawWaveform(audioBuffer, progressRatio = 0) {
+    if (!waveformCanvas || !audioBuffer) return;
     const ctx = waveformCanvas.getContext('2d');
-    const width = waveformCanvas.width = waveformCanvas.parentElement.clientWidth;
+    const containerWidth = (waveformCanvas.parentElement && waveformCanvas.parentElement.clientWidth > 0) ? waveformCanvas.parentElement.clientWidth : 720;
+    const width = waveformCanvas.width = containerWidth;
     const height = waveformCanvas.height = 90;
     const data = audioBuffer.getChannelData(0);
     const step = Math.ceil(data.length / width);
 
     ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = '#00f0ff';
 
     const amp = height / 2;
+    const playheadX = Math.floor(width * progressRatio);
+
     for (let i = 0; i < width; i++) {
       let min = 1.0;
       let max = -1.0;
@@ -616,7 +639,25 @@ document.addEventListener('DOMContentLoaded', () => {
         if (datum < min) min = datum;
         if (datum > max) max = datum;
       }
+      
+      // Color coding: Played part = Emerald (#10b981), Unplayed = Cyan (#00f0ff)
+      if (i <= playheadX && playheadX > 0) {
+        ctx.fillStyle = '#10b981';
+      } else {
+        ctx.fillStyle = '#00f0ff';
+      }
+
       ctx.fillRect(i, (1 + min) * amp, 1, Math.max(1, (max - min) * amp));
+    }
+
+    // Draw Vertical Playhead Line & Glowing Cap
+    if (playheadX > 0 && playheadX < width) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(playheadX - 1, 0, 2, height);
+      ctx.fillStyle = '#10b981';
+      ctx.beginPath();
+      ctx.arc(playheadX, height / 2, 4, 0, 2 * Math.PI);
+      ctx.fill();
     }
   }
 
@@ -791,30 +832,141 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Audio Playback
+  // Real-time Interactive Audio Playback Engine
+  let playbackStartCtxTime = 0;
+  let currentSeekTime = 0;
+  let playbackAnimFrame = null;
+
+  function updatePlaybackUI() {
+    if (!isPlaying || activeMasterIndex < 0 || !loadedFiles[activeMasterIndex]) return;
+
+    const buffer = loadedFiles[activeMasterIndex].buffer;
+    const duration = buffer.duration;
+    const elapsed = currentSeekTime + (audioDecoder.audioCtx.currentTime - playbackStartCtxTime);
+
+    if (elapsed >= duration) {
+      stopPlayback();
+      return;
+    }
+
+    const progressRatio = Math.min(1.0, elapsed / duration);
+
+    // Update Seconds Display: 01:23 / 03:45
+    const timeDisplay = document.getElementById('time-display');
+    if (timeDisplay) {
+      timeDisplay.textContent = `${formatTime(elapsed)} / ${formatTime(duration)}`;
+    }
+
+    // Update Waveform Scrubber Range Slider
+    const scrubber = document.getElementById('waveform-scrubber');
+    if (scrubber) {
+      scrubber.value = (progressRatio * 100).toFixed(1);
+    }
+
+    // Redraw Waveform with Progress Highlight
+    drawWaveform(buffer, progressRatio);
+
+    playbackAnimFrame = requestAnimationFrame(updatePlaybackUI);
+  }
+
+  function startPlaybackAt(seekTime = 0) {
+    if (activeMasterIndex < 0 || !loadedFiles[activeMasterIndex]) return;
+
+    if (currentAudioSource) {
+      try { currentAudioSource.stop(); } catch (e) {}
+      currentAudioSource = null;
+    }
+    if (playbackAnimFrame) {
+      cancelAnimationFrame(playbackAnimFrame);
+      playbackAnimFrame = null;
+    }
+
+    const buffer = loadedFiles[activeMasterIndex].buffer;
+    const duration = buffer.duration;
+    currentSeekTime = Math.max(0, Math.min(duration, seekTime));
+
+    if (audioDecoder.audioCtx.state === 'suspended') {
+      audioDecoder.audioCtx.resume();
+    }
+
+    currentAudioSource = audioDecoder.audioCtx.createBufferSource();
+    currentAudioSource.buffer = buffer;
+    currentAudioSource.connect(audioDecoder.audioCtx.destination);
+    currentAudioSource.start(0, currentSeekTime);
+
+    playbackStartCtxTime = audioDecoder.audioCtx.currentTime;
+    isPlaying = true;
+    btnPlay.innerHTML = '<i class="fa-solid fa-pause"></i>';
+    currentTrackName.textContent = loadedFiles[activeMasterIndex].name;
+
+    currentAudioSource.onended = () => {
+      const elapsed = currentSeekTime + (audioDecoder.audioCtx.currentTime - playbackStartCtxTime);
+      if (elapsed >= duration - 0.2) {
+        stopPlayback();
+      }
+    };
+
+    updatePlaybackUI();
+  }
+
+  function stopPlayback() {
+    if (currentAudioSource) {
+      try { currentAudioSource.stop(); } catch (e) {}
+      currentAudioSource = null;
+    }
+    if (playbackAnimFrame) {
+      cancelAnimationFrame(playbackAnimFrame);
+      playbackAnimFrame = null;
+    }
+    isPlaying = false;
+    currentSeekTime = 0;
+    btnPlay.innerHTML = '<i class="fa-solid fa-play"></i>';
+
+    if (activeMasterIndex >= 0 && loadedFiles[activeMasterIndex]) {
+      const buffer = loadedFiles[activeMasterIndex].buffer;
+      const timeDisplay = document.getElementById('time-display');
+      if (timeDisplay) {
+        timeDisplay.textContent = `00:00 / ${formatTime(buffer.duration)}`;
+      }
+      const scrubber = document.getElementById('waveform-scrubber');
+      if (scrubber) scrubber.value = 0;
+      drawWaveform(buffer, 0);
+    }
+  }
+
   btnPlay.addEventListener('click', () => {
     if (activeMasterIndex < 0 || !loadedFiles[activeMasterIndex]) return;
 
     if (isPlaying) {
-      if (currentAudioSource) currentAudioSource.stop();
-      isPlaying = false;
-      btnPlay.innerHTML = '<i class="fa-solid fa-play"></i>';
+      stopPlayback();
     } else {
-      const buffer = loadedFiles[activeMasterIndex].buffer;
-      currentAudioSource = audioDecoder.audioCtx.createBufferSource();
-      currentAudioSource.buffer = buffer;
-      currentAudioSource.connect(audioDecoder.audioCtx.destination);
-      currentAudioSource.start(0);
-      isPlaying = true;
-      btnPlay.innerHTML = '<i class="fa-solid fa-pause"></i>';
-      currentTrackName.textContent = loadedFiles[activeMasterIndex].name;
-
-      currentAudioSource.onended = () => {
-        isPlaying = false;
-        btnPlay.innerHTML = '<i class="fa-solid fa-play"></i>';
-      };
+      startPlaybackAt(currentSeekTime);
     }
   });
+
+  // Waveform Click-to-Seek & Scrubber Range Input Listeners
+  const waveformContainer = document.querySelector('.waveform-container');
+  if (waveformContainer) {
+    waveformContainer.addEventListener('click', (e) => {
+      if (e.target.id === 'waveform-scrubber') return;
+      if (activeMasterIndex < 0 || !loadedFiles[activeMasterIndex]) return;
+      const rect = waveformContainer.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+      const buffer = loadedFiles[activeMasterIndex].buffer;
+      startPlaybackAt(ratio * buffer.duration);
+    });
+  }
+
+  const waveformScrubber = document.getElementById('waveform-scrubber');
+  if (waveformScrubber) {
+    waveformScrubber.addEventListener('input', (e) => {
+      if (activeMasterIndex < 0 || !loadedFiles[activeMasterIndex]) return;
+      const buffer = loadedFiles[activeMasterIndex].buffer;
+      const ratio = parseFloat(e.target.value) / 100;
+      startPlaybackAt(ratio * buffer.duration);
+    });
+  }
 
   // Modal & Export Report Handlers
   btnExportReport.addEventListener('click', () => {
