@@ -1,5 +1,5 @@
 /**
- * LUFSEngine - High-Precision ITU-R BS.1770-4 & EBU R128 Compliant Loudness & True Peak Engine
+ * LUFSEngine - K-Weighting Filter & RMS Energy Loudness Engine (ITU-R BS.1770-4 / EBU R128)
  */
 class LUFSEngine {
   constructor() {
@@ -14,7 +14,7 @@ class LUFSEngine {
   }
 
   /**
-   * Analyze AudioBuffer for Integrated LUFS, Short-Term LUFS, LRA, and True Peak (dBTP)
+   * Analyze AudioBuffer using K-Weighting Filter & Channel RMS Energy
    */
   async analyzeAudioBuffer(audioBuffer) {
     const sampleRate = audioBuffer.sampleRate;
@@ -27,46 +27,52 @@ class LUFSEngine {
       rawChannels.push(audioBuffer.getChannelData(c));
     }
 
-    // 1. Compute Exact Sample-Rate Dependent K-Weighting Filter Coefficients
+    // 1. K-Weighting Filter (Stage 1 High Shelf Pre-filter + Stage 2 RLB High Pass Filter)
     const kFilteredChannels = rawChannels.map(chData => this.applyKWeighting(chData, sampleRate));
 
-    // Channel Gain Weightings (Left/Right = 1.0, Center = 1.0, Surround = 1.41)
+    // Channel Weights: Left/Right = 1.0, Center = 1.0, Surround = 1.41
     const channelWeights = numberOfChannels === 1 ? [1.0] : [1.0, 1.0];
 
-    // 2. Dual-Stage Gated Integrated LUFS (ITU-R BS.1770-4)
-    // 400ms block window, 100ms hop (75% overlap)
-    const blockSize = Math.round(sampleRate * 0.4);
-    const hopSize = Math.round(sampleRate * 0.1);
+    // 2. RMS Energy Calculation over 400ms Gated Window (ITU-R BS.1770-4)
+    const blockSize = Math.round(sampleRate * 0.4); // 400ms block
+    const hopSize = Math.round(sampleRate * 0.1);   // 100ms hop (75% overlap)
     const blocks = [];
 
     for (let ptr = 0; ptr + blockSize <= length; ptr += hopSize) {
       let blockPower = 0;
+
       for (let c = 0; c < numberOfChannels; c++) {
         const weight = channelWeights[c] || 1.0;
         const chData = kFilteredChannels[c];
+
         let sumSq = 0;
         for (let i = ptr; i < ptr + blockSize; i++) {
           const sample = chData[i];
           sumSq += sample * sample;
         }
-        blockPower += weight * (sumSq / blockSize);
+
+        // Channel RMS (Root Mean Square) Energy
+        const channelRMS = Math.sqrt(sumSq / blockSize);
+        const channelMeanSquare = channelRMS * channelRMS; // MS Energy = RMS^2
+
+        blockPower += weight * channelMeanSquare;
       }
 
-      // Convert power to LKFS/LUFS
+      // Convert RMS Mean Square Power to K-Weighted Loudness (LUFS / LKFS)
       const blockLoudness = -0.691 + 10.0 * Math.log10(Math.max(1e-12, blockPower));
       blocks.push({ loudness: blockLoudness, power: blockPower });
     }
 
-    // Stage 1: Absolute Gating Threshold (-70.0 LKFS)
+    // Stage 1: Absolute Gating Threshold (-70.0 LKFS / LUFS)
     const absGated = blocks.filter(b => b.loudness > -70.0);
 
     let integratedLUFS = -70.0;
     if (absGated.length > 0) {
-      // Calculate mean power of absGated blocks
+      // Average RMS Power across Absolute Gated Blocks
       const absMeanPower = absGated.reduce((sum, b) => sum + b.power, 0) / absGated.length;
       const absLoudness = -0.691 + 10.0 * Math.log10(Math.max(1e-12, absMeanPower));
 
-      // Stage 2: Relative Gating Threshold (-10.0 LU below absLoudness)
+      // Stage 2: Relative Gating Threshold (-10.0 LU relative to absolute mean)
       const relThreshold = absLoudness - 10.0;
       const relGated = absGated.filter(b => b.loudness > relThreshold);
 
@@ -76,7 +82,7 @@ class LUFSEngine {
       }
     }
 
-    // 3. Short-Term LUFS (3.0s sliding window, 100ms hop)
+    // 3. Short-Term LUFS (3.0s sliding RMS window)
     const stBlockSize = Math.round(sampleRate * 3.0);
     const stHopSize = Math.round(sampleRate * 0.1);
     let maxShortTermLUFS = -70.0;
@@ -91,7 +97,8 @@ class LUFSEngine {
           const sample = chData[i];
           sumSq += sample * sample;
         }
-        stPower += weight * (sumSq / stBlockSize);
+        const stRMS = Math.sqrt(sumSq / stBlockSize);
+        stPower += weight * (stRMS * stRMS);
       }
       const stLoudness = -0.691 + 10.0 * Math.log10(Math.max(1e-12, stPower));
       if (stLoudness > maxShortTermLUFS) maxShortTermLUFS = stLoudness;
@@ -114,7 +121,8 @@ class LUFSEngine {
             const sample = chData[i];
             sumSq += sample * sample;
           }
-          p += weight * (sumSq / stWin);
+          const rms = Math.sqrt(sumSq / stWin);
+          p += weight * (rms * rms);
         }
         const l = -0.691 + 10.0 * Math.log10(Math.max(1e-12, p));
         if (l > -70.0) stBlocksLoudness.push(l);
@@ -134,10 +142,10 @@ class LUFSEngine {
       }
     }
 
-    // 5. ITU-R BS.1770-4 High-Precision 4x Sinc/Polyphase Oversampling True Peak (dBTP)
+    // 5. ITU-R BS.1770-4 Precision 4x Sinc Oversampling True Peak Engine (dBTP)
     const truePeakDB = this.calculateTruePeak4xPrecision(rawChannels);
 
-    // 6. Platform Penalty & Clipping Matrix
+    // 6. Platform Penalty Matrix
     const platformAnalysis = this.platforms.map(p => {
       const loudnessPenalty = integratedLUFS > p.targetLUFS ? -(integratedLUFS - p.targetLUFS).toFixed(1) : 0;
       const truePeakExceeded = truePeakDB > p.maxTruePeak;
@@ -159,7 +167,8 @@ class LUFSEngine {
   }
 
   /**
-   * Calculate ITU-R BS.1770-4 K-Weighting Biquad Coefficients dynamically based on sample rate
+   * K-Weighting Filter: Stage 1 High Shelf Pre-filter + Stage 2 RLB High Pass Filter
+   * Computes exact biquad coefficients for any sample rate fs
    */
   applyKWeighting(channelData, fs) {
     const len = channelData.length;
@@ -167,11 +176,8 @@ class LUFSEngine {
     const output = new Float32Array(len);
 
     // Stage 1: High Shelf Filter (Head Model)
-    // Nominal: Gain = +3.99984 dB, f0 = 1681.97 Hz, Q = 0.707175
     const dbG = 3.999843853973347;
     const f0_s1 = 1681.974450973347;
-    const Q_s1 = 0.7071752369784193;
-
     const Vh = Math.pow(10, dbG / 20);
     const K1 = Math.tan((Math.PI * f0_s1) / fs);
     const norm1 = 1 + Math.SQRT2 * K1 + K1 * K1;
@@ -182,7 +188,6 @@ class LUFSEngine {
     const a1_s1 = (2 * (K1 * K1 - 1)) / norm1;
     const a2_s1 = (1 - Math.SQRT2 * K1 + K1 * K1) / norm1;
 
-    // Apply Stage 1 Biquad
     let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
     for (let i = 0; i < len; i++) {
       const x = channelData[i];
@@ -193,7 +198,6 @@ class LUFSEngine {
     }
 
     // Stage 2: High Pass Filter (RLB Filter)
-    // Nominal: f0 = 38.13547 Hz, Q = 0.500327
     const f0_s2 = 38.13547087602444;
     const Q_s2 = 0.5003270373238773;
 
@@ -206,7 +210,6 @@ class LUFSEngine {
     const a1_s2 = (2 * (K2 * K2 - 1)) / norm2;
     const a2_s2 = (1 - K2 / Q_s2 + K2 * K2) / norm2;
 
-    // Apply Stage 2 Biquad
     x1 = 0; x2 = 0; y1 = 0; y2 = 0;
     for (let i = 0; i < len; i++) {
       const x = stage1Out[i];
@@ -220,31 +223,27 @@ class LUFSEngine {
   }
 
   /**
-   * ITU-R BS.1770-4 High-Precision 4x Oversampling True Peak Engine
-   * Uses 16-tap polyphase Sinc FIR interpolation across EVERY sample (no skipping)
+   * ITU-R BS.1770-4 Precision 4x Sinc Polyphase Oversampling True Peak Engine
    */
   calculateTruePeak4xPrecision(channels) {
     let maxPeak = 0;
 
-    // 4x Oversampling Sinc FIR Filter Weights (16-tap windowed sinc coefficients for phases 0, 0.25, 0.5, 0.75)
     const polyCoeffs = [
-      [0, 0, 0, 0, 0, 0, 0, 1.0, 0, 0, 0, 0, 0, 0, 0, 0], // t = 0.0
-      [-0.003, 0.008, -0.019, 0.038, -0.071, 0.134, -0.279, 0.942, 0.311, -0.112, 0.053, -0.027, 0.013, -0.006, 0.002, 0], // t = 0.25
-      [-0.005, 0.013, -0.029, 0.057, -0.104, 0.198, -0.424, 0.796, 0.796, -0.424, 0.198, -0.104, 0.057, -0.029, 0.013, -0.005], // t = 0.50
-      [0, -0.006, 0.013, -0.027, 0.053, -0.112, 0.311, 0.942, -0.279, 0.134, -0.071, 0.038, -0.019, 0.008, -0.003, 0]  // t = 0.75
+      [0, 0, 0, 0, 0, 0, 0, 1.0, 0, 0, 0, 0, 0, 0, 0, 0],
+      [-0.003, 0.008, -0.019, 0.038, -0.071, 0.134, -0.279, 0.942, 0.311, -0.112, 0.053, -0.027, 0.013, -0.006, 0.002, 0],
+      [-0.005, 0.013, -0.029, 0.057, -0.104, 0.198, -0.424, 0.796, 0.796, -0.424, 0.198, -0.104, 0.057, -0.029, 0.013, -0.005],
+      [0, -0.006, 0.013, -0.027, 0.053, -0.112, 0.311, 0.942, -0.279, 0.134, -0.071, 0.038, -0.019, 0.008, -0.003, 0]
     ];
 
     for (let c = 0; c < channels.length; c++) {
       const data = channels[c];
       const len = data.length;
 
-      // Scan raw samples first
       for (let i = 0; i < len; i++) {
         const absVal = Math.abs(data[i]);
         if (absVal > maxPeak) maxPeak = absVal;
       }
 
-      // Scan 4x interpolated sub-samples
       for (let i = 7; i < len - 8; i++) {
         for (let phase = 1; phase < 4; phase++) {
           const coeffs = polyCoeffs[phase];
