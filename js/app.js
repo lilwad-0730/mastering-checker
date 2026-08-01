@@ -640,11 +640,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (datum > max) max = datum;
       }
       
-      // Color coding: Played part = Emerald (#10b981), Unplayed = Cyan (#00f0ff)
+      // Minimalist Earth Palette: Played = #9D7553, Unplayed = #A98B73
       if (i <= playheadX && playheadX > 0) {
-        ctx.fillStyle = '#10b981';
+        ctx.fillStyle = '#9D7553';
       } else {
-        ctx.fillStyle = '#00f0ff';
+        ctx.fillStyle = '#A98B73';
       }
 
       ctx.fillRect(i, (1 + min) * amp, 1, Math.max(1, (max - min) * amp));
@@ -652,9 +652,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Draw Vertical Playhead Line & Glowing Cap
     if (playheadX > 0 && playheadX < width) {
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = '#F3EFEA';
       ctx.fillRect(playheadX - 1, 0, 2, height);
-      ctx.fillStyle = '#10b981';
+      ctx.fillStyle = '#9D7553';
       ctx.beginPath();
       ctx.arc(playheadX, height / 2, 4, 0, 2 * Math.PI);
       ctx.fill();
@@ -670,12 +670,12 @@ document.addEventListener('DOMContentLoaded', () => {
     ctx.clearRect(0, 0, width, height);
 
     const bands = [
-      { id: 'sub', label: 'Sub (20-60Hz)', color: '#3b82f6' },
-      { id: 'bass', label: 'Bass (60-250Hz)', color: '#00f0ff' },
-      { id: 'mud', label: 'Mud (250-500Hz)', color: '#f59e0b' },
-      { id: 'mid', label: 'Mid (500-2kHz)', color: '#10b981' },
-      { id: 'vocal', label: 'Vocal (2k-6kHz)', color: '#ef4444' },
-      { id: 'air', label: 'Air (6k-20kHz)', color: '#8b5cf6' }
+      { id: 'sub', label: 'Sub (20-60Hz)', color: '#8E847A' },
+      { id: 'bass', label: 'Bass (60-250Hz)', color: '#9D7553' },
+      { id: 'mud', label: 'Mud (250-500Hz)', color: '#D9A86C' },
+      { id: 'mid', label: 'Mid (500-2kHz)', color: '#A98B73' },
+      { id: 'vocal', label: 'Vocal (2k-6kHz)', color: '#B89C82' },
+      { id: 'air', label: 'Air (6k-20kHz)', color: '#E8D8C8' }
     ];
 
     const barWidth = (width - 40) / bands.length;
@@ -690,7 +690,7 @@ document.addEventListener('DOMContentLoaded', () => {
       ctx.fillRect(x + 10, y, barWidth - 20, barHeight);
 
       // Label text
-      ctx.fillStyle = '#94a3b8';
+      ctx.fillStyle = '#C5BCB3';
       ctx.font = '11px Inter';
       ctx.textAlign = 'center';
       ctx.fillText(b.label, x + barWidth / 2, height - 10);
@@ -715,7 +715,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const radius = Math.min(width / 2 - 40, height - 50);
 
     // 1. Draw Semicircular Polar Grid & Arc
-    ctx.strokeStyle = 'rgba(0, 240, 255, 0.15)';
+    ctx.strokeStyle = 'rgba(169, 139, 115, 0.2)';
     ctx.lineWidth = 1;
 
     // Grid concentric arcs (25%, 50%, 75%, 100%)
@@ -736,7 +736,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     ctx.font = '10px JetBrains Mono';
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#64748b';
+    ctx.fillStyle = '#8E847A';
 
     angles.forEach(a => {
       const x = centerX + Math.sin(a.angle) * radius;
@@ -745,7 +745,7 @@ document.addEventListener('DOMContentLoaded', () => {
       ctx.beginPath();
       ctx.moveTo(centerX, centerY);
       ctx.lineTo(x, y);
-      ctx.strokeStyle = a.angle === 0 ? 'rgba(0, 240, 255, 0.4)' : 'rgba(255, 255, 255, 0.08)';
+      ctx.strokeStyle = a.angle === 0 ? 'rgba(169, 139, 115, 0.45)' : 'rgba(255, 255, 255, 0.08)';
       ctx.stroke();
 
       const labelX = centerX + Math.sin(a.angle) * (radius + 18);
@@ -756,7 +756,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Outer Semicircle Arc Line
     ctx.beginPath();
     ctx.arc(centerX, centerY, radius, Math.PI, 2 * Math.PI, false);
-    ctx.strokeStyle = 'rgba(0, 240, 255, 0.5)';
+    ctx.strokeStyle = '#A98B73';
     ctx.lineWidth = 2;
     ctx.stroke();
 
@@ -764,9 +764,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!polarPoints || polarPoints.length === 0) return;
 
     const colorStyles = [
-      'rgba(16, 185, 129, 0.7)',  // 0: Green (Mono / In-phase)
-      'rgba(0, 240, 255, 0.6)',   // 1: Cyan (Stereo Wide)
-      'rgba(239, 68, 68, 0.75)'   // 2: Red (Out-of-phase)
+      'rgba(169, 139, 115, 0.85)', // 0: Warm Sand (Mono / In-phase)
+      'rgba(157, 117, 83, 0.8)',   // 1: Caramel Bronze (Stereo Wide)
+      'rgba(217, 108, 108, 0.85)'  // 2: Red (Out-of-phase)
     ];
 
     for (let cType = 0; cType < 3; cType++) {
@@ -795,7 +795,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 3. Center Glow Origin Dot
     ctx.beginPath();
     ctx.arc(centerX, centerY, 4, 0, 2 * Math.PI);
-    ctx.fillStyle = '#00f0ff';
+    ctx.fillStyle = '#A98B73';
     ctx.fill();
   }
 
@@ -813,7 +813,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!chromaValues || chromaValues.length < 12) return;
 
-    const colors = ['#8b5cf6', '#ec4899', '#ef4444', '#f97316', '#f59e0b', '#10b981', '#06b6d4', '#00f0ff', '#3b82f6', '#6366f1', '#a855f7', '#d946ef'];
+    const colors = ['#A98B73', '#9D7553', '#B89C82', '#D9A86C', '#C5BCB3', '#8E847A', '#A98B73', '#9D7553', '#E8D8C8', '#B89C82', '#D9A86C', '#C5BCB3'];
     const barWidth = (width - 40) / 12;
 
     chromaValues.forEach((val, i) => {
@@ -824,7 +824,7 @@ document.addEventListener('DOMContentLoaded', () => {
       ctx.fillStyle = colors[i % colors.length];
       ctx.fillRect(x + 4, y, barWidth - 8, barHeight);
 
-      ctx.fillStyle = '#94a3b8';
+      ctx.fillStyle = '#C5BCB3';
       ctx.font = '11px JetBrains Mono';
       ctx.textAlign = 'center';
       ctx.fillText(pitchNames[i] || i, x + barWidth / 2, height - 10);
