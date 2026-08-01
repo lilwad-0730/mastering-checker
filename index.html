@@ -109,28 +109,7 @@
       <!-- Right Main Content & Analytics Panel -->
       <section class="main-content">
 
-        <!-- Quick Status Overview Banner -->
-        <div id="status-banner" class="status-banner hidden">
-          <div class="status-item">
-            <div class="status-label">檢測狀態</div>
-            <div id="status-text" class="status-value highlight-green">準備就緒</div>
-          </div>
-          <div class="status-item">
-            <div class="status-label">檔案總數</div>
-            <div id="status-files" class="status-value">0 Tracks</div>
-          </div>
-          <div class="status-item">
-            <div class="status-label">整體母帶評級</div>
-            <div id="status-grade" class="status-value grade-badge">--</div>
-          </div>
-          <div class="status-item" style="display:flex; align-items:center; justify-content:flex-end;">
-            <button id="btn-export-report" class="btn btn-primary">
-              <i class="fa-solid fa-file-contract"></i> 檢視與匯出母帶診斷報告
-            </button>
-          </div>
-        </div>
-
-        <!-- Navigation Tabs -->
+        <!-- Navigation Tabs Bar -->
         <nav class="analysis-tabs">
           <button class="tab-btn active" data-tab="tab-lufs">
             <i class="fa-solid fa-chart-simple"></i> LUFS & True Peak 平台對照
@@ -151,6 +130,27 @@
             <i class="fa-solid fa-music"></i> 歌曲調性 (Song Key)
           </button>
         </nav>
+
+        <!-- Quick Status Overview Banner (Shown ONLY after analysis runs) -->
+        <div id="status-banner" class="status-banner hidden">
+          <div class="status-item">
+            <div class="status-label">檢測狀態</div>
+            <div id="status-text" class="status-value highlight-green">全項目檢測完成</div>
+          </div>
+          <div class="status-item">
+            <div class="status-label">檔案總數</div>
+            <div id="status-files" class="status-value">0 Tracks</div>
+          </div>
+          <div class="status-item">
+            <div class="status-label">整體母帶評級</div>
+            <div id="status-grade" class="status-value grade-badge">--</div>
+          </div>
+          <div class="status-item" style="display:flex; align-items:center; justify-content:flex-end;">
+            <button id="btn-export-report" class="btn btn-primary">
+              <i class="fa-solid fa-file-contract"></i> 檢視與匯出母帶診斷報告
+            </button>
+          </div>
+        </div>
 
         <!-- Tab 1: LUFS & True Peak Meter & Platforms -->
         <div id="tab-lufs" class="tab-content active">
@@ -446,24 +446,23 @@
 
       </section>
     </main>
+  </div>
 
-    <!-- Report Modal / Printable View -->
-    <div id="report-modal" class="modal hidden">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2><i class="fa-solid fa-file-contract"></i> 獨立音樂人母帶檢查診斷報告</h2>
-          <button id="btn-close-modal" class="btn btn-icon"><i class="fa-solid fa-xmark"></i></button>
-        </div>
-        <div id="report-body" class="report-body">
-          <!-- Dynamic report content -->
-        </div>
-        <div class="modal-footer">
-          <button id="btn-print-report" class="btn btn-secondary"><i class="fa-solid fa-print"></i> 列印 / 存為 PDF</button>
-          <button id="btn-copy-markdown" class="btn btn-primary"><i class="fa-solid fa-copy"></i> 複製 Markdown 報告</button>
-        </div>
+  <!-- Report Modal / Printable Overlay View (Top-level Document Child) -->
+  <div id="report-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2><i class="fa-solid fa-file-contract"></i> 獨立音樂人母帶檢查診斷報告</h2>
+        <button id="btn-close-modal" class="btn btn-icon"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div id="report-body" class="report-body">
+        <!-- Dynamic report content -->
+      </div>
+      <div class="modal-footer">
+        <button id="btn-print-report" class="btn btn-secondary"><i class="fa-solid fa-print"></i> 列印 / 存為 PDF</button>
+        <button id="btn-copy-markdown" class="btn btn-primary"><i class="fa-solid fa-copy"></i> 複製 Markdown 報告</button>
       </div>
     </div>
-
   </div>
 
   <!-- Scripts -->
