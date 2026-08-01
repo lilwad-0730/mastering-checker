@@ -46,9 +46,34 @@ body.dark-theme {
   background-color: var(--bg-primary);
   color: var(--text-primary);
   font-family: var(--font-main);
-  line-height: 1.5;
+  line-height: 1.55;
   min-height: 100vh;
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Typography & Icon Alignment System */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-primary);
+  letter-spacing: -0.015em;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+i.fa-solid, i.fa-brands, i.fa-regular {
+  vertical-align: -0.08em;
+  margin-right: 4px;
+}
+
+.btn i {
+  margin-right: 6px;
+  font-size: 0.95em;
+}
+
+.panel-header h3 i, .panel-header h4 i {
+  margin-right: 6px;
+  color: var(--accent-warm);
 }
 
 .app-container {
